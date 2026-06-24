@@ -6,6 +6,11 @@ use std::time::Duration;
 use xdialog::{XDialogIcon, XDialogOptions, XDialogResult};
 
 static SILENT: AtomicBool = AtomicBool::new(false);
+// CONFIRM is a "quiet-but-visible" mode: like SILENT it auto-answers yes/no prompts (so an
+// unattended downgrade/rollback isn't blocked waiting on the overwrite dialog), but UNLIKE
+// SILENT it does NOT suppress progress / splash UI. This lets a caller (e.g. MineScape's
+// rollback) reinstall an older version without a prompt while still showing the loading splash.
+static CONFIRM: AtomicBool = AtomicBool::new(false);
 static DIALOG_TIMEOUT_MS: AtomicU64 = AtomicU64::new(0);
 
 pub fn set_silent(silent: bool) {
@@ -15,6 +20,14 @@ pub fn set_silent(silent: bool) {
 
 pub fn get_silent() -> bool {
     SILENT.load(Ordering::Relaxed)
+}
+
+pub fn set_confirm(confirm: bool) {
+    CONFIRM.store(confirm, Ordering::Relaxed);
+}
+
+pub fn get_confirm() -> bool {
+    CONFIRM.load(Ordering::Relaxed)
 }
 
 pub fn set_dialog_timeout(timeout: Option<Duration>) {
@@ -191,7 +204,9 @@ pub fn show_overwrite_repair_dialog(
     root_path: &Path,
     installed_version: Option<&semver::Version>,
 ) -> bool {
-    if get_silent() {
+    // Auto-confirm in silent mode, and also in confirm mode (which still shows the splash) so an
+    // unattended downgrade/rollback proceeds without waiting on this prompt.
+    if get_silent() || get_confirm() {
         return true;
     }
 

@@ -119,8 +119,26 @@ pub fn apply_package_impl(old_locator: &VelopackLocator, package: &PathBuf, hook
     let temp_path_new = old_locator.get_temp_dir_rand16();
     let temp_path_old = old_locator.get_temp_dir_rand16();
 
-    // open a dialog showing progress...
-    let reporter = dialogs::progress::show_apply_progress(&new_locator.get_manifest_title(), &new_locator.get_manifest_version_full_string());
+    // open a progress UI. Prefer the branded splash image (the same loading screen Setup.exe
+    // shows during install) so updates and rollbacks get a consistent loading visual instead of a
+    // plain progress dialog. Falls back to the text progress dialog when the package carries no
+    // splash image, and to nothing in silent mode.
+    let reporter: Box<dyn dialogs::progress::ProgressReporter> = if dialogs::get_silent() {
+        Box::new(dialogs::progress::NoopProgressReporter)
+    } else if let Some(splash_bytes) = bundle.get_splash_bytes() {
+        let manifest = new_locator.get_manifest();
+        let tx = windows::splash::show_splash_dialog(
+            manifest.title.clone(),
+            manifest.version.to_string(),
+            Some(splash_bytes),
+            windows::splash::SplashOptions {
+                splash_progress_color: Some(manifest.splash_progress_color.clone()),
+            },
+        );
+        Box::new(dialogs::progress::ChannelProgressReporter::new(tx))
+    } else {
+        dialogs::progress::show_apply_progress(&new_locator.get_manifest_title(), &new_locator.get_manifest_version_full_string())
+    };
 
     let action: Result<()> = (|| {
         // first, extract the update to temp_path_new
