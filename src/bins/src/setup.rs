@@ -133,7 +133,6 @@ fn main_inner() -> Result<()> {
     info!("Starting Velopack Setup ({})", env!("NGBV_VERSION"));
     info!("    Location: {:?}", env::current_exe()?);
     info!("    Silent: {}", silent);
-    info!("    Confirm: {}", confirm);
     info!("    Verbose: {}", verbose);
     info!("    Log: {:?}", desired_log_file);
     info!("    Install To: {:?}", install_to);
