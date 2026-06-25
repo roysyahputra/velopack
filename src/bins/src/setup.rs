@@ -97,7 +97,6 @@ fn main_inner() -> Result<()> {
     let mut arg_config = Command::new("Setup")
         .about(format!("Velopack Setup ({}) installs applications.\nhttps://velopack.io", env!("NGBV_VERSION")))
         .arg(arg!(-s --silent "Hides all dialogs and answers 'yes' to all prompts"))
-        .arg(arg!(-y --confirm "Answers 'yes' to overwrite/downgrade prompts but still shows the progress splash"))
         .arg(arg!(-v --verbose "Print debug messages to console"))
         .arg(arg!(-l --log <FILE> "Enable file logging and set location").required(false).value_parser(value_parser!(PathBuf)))
         .arg(arg!(-t --installto <DIR> "Installation directory to install the application").required(false).value_parser(value_parser!(PathBuf)))
@@ -115,9 +114,7 @@ fn main_inner() -> Result<()> {
     let matches = arg_config.try_get_matches()?;
 
     let silent = matches.get_flag("silent");
-    let confirm = matches.get_flag("confirm");
     dialogs::set_silent(silent);
-    dialogs::set_confirm(confirm);
     if !silent {
         dialogs::set_dialog_timeout(Some(std::time::Duration::from_secs(300)));
     }

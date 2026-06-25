@@ -6,11 +6,6 @@ use std::time::Duration;
 use xdialog::{XDialogIcon, XDialogOptions, XDialogResult};
 
 static SILENT: AtomicBool = AtomicBool::new(false);
-// CONFIRM is a "quiet-but-visible" mode: like SILENT it auto-answers yes/no prompts (so an
-// unattended downgrade/rollback isn't blocked waiting on the overwrite dialog), but UNLIKE
-// SILENT it does NOT suppress progress / splash UI. This lets a caller (e.g. MineScape's
-// rollback) reinstall an older version without a prompt while still showing the loading splash.
-static CONFIRM: AtomicBool = AtomicBool::new(false);
 static DIALOG_TIMEOUT_MS: AtomicU64 = AtomicU64::new(0);
 
 pub fn set_silent(silent: bool) {
@@ -20,14 +15,6 @@ pub fn set_silent(silent: bool) {
 
 pub fn get_silent() -> bool {
     SILENT.load(Ordering::Relaxed)
-}
-
-pub fn set_confirm(confirm: bool) {
-    CONFIRM.store(confirm, Ordering::Relaxed);
-}
-
-pub fn get_confirm() -> bool {
-    CONFIRM.load(Ordering::Relaxed)
 }
 
 pub fn set_dialog_timeout(timeout: Option<Duration>) {
@@ -199,75 +186,16 @@ pub fn show_uninstall_complete_with_errors_dialog(app_title: &str, log_path: Opt
 }
 
 pub fn show_overwrite_repair_dialog(
-    app_title: &str,
-    app_version: &semver::Version,
-    root_path: &Path,
-    installed_version: Option<&semver::Version>,
+    _app_title: &str,
+    _app_version: &semver::Version,
+    _root_path: &Path,
+    _installed_version: Option<&semver::Version>,
 ) -> bool {
-    // Auto-confirm in silent mode, and also in confirm mode (which still shows the splash) so an
-    // unattended downgrade/rollback proceeds without waiting on this prompt.
-    if get_silent() || get_confirm() {
-        return true;
-    }
-
-    let title = locale_strings::title_setup(app_title);
-    let path_str = root_path.display().to_string();
-
-    let instruction;
-    let body;
-    let yes_label;
-
-    if let Some(old_version) = installed_version {
-        let old_str = old_version.to_string();
-        let ver_str = app_version.to_string();
-        if old_version < app_version {
-            instruction = locale_strings::overwrite_older_installed(app_title);
-            body = locale_strings::overwrite_update_body(&old_str, &ver_str);
-            yes_label = locale_strings::btn_update();
-        } else if old_version > app_version {
-            instruction = locale_strings::overwrite_newer_installed(app_title);
-            body = locale_strings::overwrite_downgrade_body(&old_str);
-            yes_label = locale_strings::btn_downgrade();
-        } else {
-            instruction = locale_strings::overwrite_already_installed(app_title);
-            body = locale_strings::overwrite_repair_body();
-            yes_label = locale_strings::btn_repair();
-        }
-    } else {
-        instruction = locale_strings::overwrite_already_installed(app_title);
-        body = locale_strings::overwrite_repair_body();
-        yes_label = locale_strings::btn_repair();
-    }
-
-    let footer = locale_strings::overwrite_footer(&path_str);
-
-    let cancel_label = locale_strings::btn_cancel();
-    let open_dir_label = locale_strings::btn_open_install_dir();
-    let full_body = format!("{}\n\n{}", body, footer);
-
-    let result = xdialog::show_message(
-        XDialogOptions {
-            title,
-            main_instruction: instruction,
-            message: full_body,
-            icon: XDialogIcon::Warning,
-            buttons: vec![yes_label, open_dir_label, cancel_label],
-        },
-        get_dialog_timeout(),
-    );
-
-    match result {
-        Ok(XDialogResult::ButtonPressed(0)) => true,
-        Ok(XDialogResult::ButtonPressed(1)) => {
-            open_path(root_path);
-            show_overwrite_repair_dialog(app_title, app_version, root_path, installed_version)
-        }
-        Ok(XDialogResult::TimeoutElapsed) => {
-            warn!("Overwrite/repair dialog timed out, treating as cancel.");
-            false
-        }
-        _ => false,
-    }
+    // MineScape fork: ALWAYS auto-confirm the overwrite/downgrade/repair prompt so unattended
+    // installs, updates and rollbacks (including downgrades) proceed without waiting on this dialog.
+    // Replaces the earlier --confirm flag; no flag / fork-only CLI surface needed, which keeps
+    // MineScape forward-compatible with stock Velopack.
+    true
 }
 
 // --- Helper functions that encapsulate locale_strings calls ---
