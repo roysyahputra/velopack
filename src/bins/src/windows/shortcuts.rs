@@ -112,6 +112,13 @@ unsafe fn unsafe_update_app_manifest_lnks(next_app: &VelopackLocator, previous_a
     let app_main_exe = next_app.get_main_exe_path();
     let app_work_dir = next_app.get_current_bin_dir();
 
+    // Lower-cased main-exe file name, used to decide which shortcuts are the "main" app shortcut.
+    // Only those may carry the app AUMID (see the set_aumid call in the update loop below).
+    let app_main_exe_name_lc = app_main_exe
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+
     info!("App Model ID: {:?}", app_model_id);
     let mut current_shortcuts = unsafe_get_shortcuts_for_root_dir(root_path);
 
@@ -124,6 +131,15 @@ unsafe fn unsafe_update_app_manifest_lnks(next_app: &VelopackLocator, previous_a
 
         let target_option = lnk.get_target_path().ok();
 
+        // Does this shortcut point at the app's main exe? Only the main-exe shortcut may carry the
+        // app AUMID (see the set_aumid call below). Compared by file name so path representation
+        // differences (8.3 names, casing, separators) can't mis-classify the main shortcut.
+        let mut targets_main_exe = target_option
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_lowercase() == app_main_exe_name_lc)
+            .unwrap_or(false);
+
         // set the target path to the main exe if it is missing or incorrect
         if !target_option.as_ref().is_some_and(|p| p.exists()) {
             warn!(
@@ -132,6 +148,9 @@ unsafe fn unsafe_update_app_manifest_lnks(next_app: &VelopackLocator, previous_a
             );
             if let Err(e) = lnk.set_target_path(&app_main_exe) {
                 warn!("Failed to update shortcut target: {}", e);
+            } else {
+                // we just repointed this shortcut at the main exe, so it now IS the main shortcut
+                targets_main_exe = true;
             }
             if let Err(e) = lnk.set_working_directory(&app_work_dir) {
                 warn!("Failed to update shortcut working directory: {}", e);
@@ -143,7 +162,13 @@ unsafe fn unsafe_update_app_manifest_lnks(next_app: &VelopackLocator, previous_a
             warn!("Failed to update shortcut icon location: {}", e);
         }
 
-        if let Err(e) = lnk.set_aumid(app_model_id.as_deref()) {
+        // Only the main-exe shortcut carries the app AUMID. Stamping the same AUMID on auxiliary
+        // shortcuts (e.g. a Diagnostics tool living in the same install) makes Windows treat them
+        // as one application, so the taskbar icon, taskbar pinning, and Start-menu/Search launch
+        // all resolve ambiguously between them (intermittently showing/launching the wrong one).
+        // Clearing the AUMID on non-main shortcuts gives each its own identity.
+        let shortcut_aumid = if targets_main_exe { app_model_id.as_deref() } else { None };
+        if let Err(e) = lnk.set_aumid(shortcut_aumid) {
             warn!("Failed to update shortcut app model ID: {}", e);
         }
 
