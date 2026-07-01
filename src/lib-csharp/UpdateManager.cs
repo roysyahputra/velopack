@@ -415,9 +415,14 @@ namespace Velopack
             psi.AppendArgumentListSafe(args, out _);
             psi.CreateNoWindow = true;
             var p = psi.StartRedirectOutputToILogger(Log, VelopackLogLevel.Debug);
-            if (!p.WaitForExit((int) TimeSpan.FromMinutes(5).TotalMilliseconds)) {
+            // Large apps (e.g. MineScape ~1.6 GB, thousands of files) can take well over the original
+            // 5-minute limit to extract the base package and apply all zsdiff patches, causing the
+            // patch to be killed and the whole delta to fall back to a full multi-GB re-download. Use
+            // a generous timeout so slow disks / AV scanning don't trip it.
+            var patchTimeout = TimeSpan.FromMinutes(30);
+            if (!p.WaitForExit((int) patchTimeout.TotalMilliseconds)) {
                 p.Kill();
-                throw new TimeoutException("patch process timed out (5min).");
+                throw new TimeoutException($"patch process timed out ({patchTimeout.TotalMinutes:0}min).");
             }
 
             if (p.ExitCode != 0) {
