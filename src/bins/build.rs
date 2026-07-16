@@ -9,7 +9,10 @@ fn main() {
     let version = env!("CARGO_PKG_VERSION");
     let ver = semver::Version::parse(version).expect("Unable to parse ngbv output as semver version");
     let ver: u64 = ver.major << 48 | ver.minor << 32 | ver.patch << 16;
-    let desc = format!("Velopack {}", version);
+    // FileDescription is what Task Manager shows as the process name. Squirrel's updater showed
+    // "Update", so keep that here (dropping the "Velopack {version}" text) for parity. ProductVersion
+    // / FILEVERSION below still carry the real version for the file's Details tab.
+    let desc = "Update";
 
     println!("cargo:rustc-env=NGBV_VERSION={}", version);
 
@@ -21,7 +24,7 @@ fn main() {
         .set("CompanyName", "Velopack")
         .set("ProductName", "Velopack")
         .set("ProductVersion", version)
-        .set("FileDescription", &desc)
+        .set("FileDescription", desc)
         .set("LegalCopyright", "Caelan Sayler (c) 2023, Velopack Ltd. (c) 2024")
         .compile()
         .unwrap();
